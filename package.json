@@ -6,7 +6,8 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "build": "prisma generate && prisma migrate deploy && rm -rf dist && tsc -p tsconfig.build.json",
+    "build": "prisma generate && prisma migrate deploy && npm run compile",
+    "compile": "rm -rf dist && tsc -p tsconfig.build.json",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
