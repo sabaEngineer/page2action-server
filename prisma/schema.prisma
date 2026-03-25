@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  avatar        String?
+  googleId      String   @unique
+  shareSlug     String?  @unique
+  allPublic     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  books         Book[]
+  shelves       Shelf[]
+  insights      Insight[]
+}
+
+model Shelf {
+  id        String   @id @default(cuid())
+  name      String
+  position  Int      @default(0)
+  isPublic  Boolean  @default(false)
+  shareSlug String?  @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  books     Book[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Book {
+  id        String    @id @default(cuid())
+  title     String
+  author    String?
+  shelfId   String?
+  shelf     Shelf?    @relation(fields: [shelfId], references: [id], onDelete: SetNull)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  insights  Insight[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([shelfId])
+}
+
+enum InsightStyle {
+  MORNING_BOOST
+  APPLY_TODAY
+  DO_IT_NOW
+  SPREAD_THE_IDEA
+  TODAYS_TAKEAWAY
+}
+
+model Insight {
+  id        String          @id @default(cuid())
+  content   String
+  style     InsightStyle?
+  bookId    String
+  book      Book            @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  position  Int             @default(0)
+  details   InsightDetail[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@index([bookId])
+  @@index([userId])
+}
+
+enum DetailType {
+  EXAMPLE
+  STORY
+  NOTE
+}
+
+model InsightDetail {
+  id        String     @id @default(cuid())
+  content   String
+  type      DetailType @default(NOTE)
+  insightId String
+  insight   Insight    @relation(fields: [insightId], references: [id], onDelete: Cascade)
+  position  Int        @default(0)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([insightId])
+}

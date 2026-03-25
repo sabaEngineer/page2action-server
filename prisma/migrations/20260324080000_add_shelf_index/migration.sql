@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Book" ADD COLUMN "shelfIndex" INTEGER NOT NULL DEFAULT 0;
