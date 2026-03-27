@@ -62,20 +62,23 @@ enum InsightStyle {
 }
 
 model Insight {
-  id        String          @id @default(cuid())
-  content   String
-  style     InsightStyle?
-  bookId    String
-  book      Book            @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  position  Int             @default(0)
-  details   InsightDetail[]
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
+  id                    String          @id @default(cuid())
+  content               String
+  style                 InsightStyle?
+  bookId                String
+  book                  Book            @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  userId                String
+  user                  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  position              Int             @default(0)
+  /// Set when this insight was included in the daily Morning Boost email (at most once per insight).
+  morningDigestSentAt   DateTime?
+  details               InsightDetail[]
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
 
   @@index([bookId])
   @@index([userId])
+  @@index([userId, style, morningDigestSentAt])
 }
 
 enum DetailType {
