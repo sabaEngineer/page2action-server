@@ -3,6 +3,10 @@ import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { PrismaService } from '../prisma/prisma.service';
 
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 const VALID_STYLES = [
   'MORNING_BOOST',
   'APPLY_TODAY',
@@ -17,11 +21,9 @@ const SYSTEM_PROMPT = `Classify a book insight into ONE notification style. Pick
 
 2. APPLY_TODAY — a practical technique or method to try today, but depends on context or situation. "Next time someone criticises you, pause before reacting." Needs a moment or setting to apply → APPLY_TODAY.
 
-3. MORNING_BOOST — short, punchy, motivational. Makes you feel energised or reminded of what matters. No specific action needed. "You don't need more time, you need more focus." If it's a quick hit of energy or perspective → MORNING_BOOST. When in doubt between this and SPREAD_THE_IDEA, pick MORNING_BOOST.
+3. MORNING_BOOST — not long, punchy, motivational. Makes you feel energised or reminded of what matters. No specific action needed. "You don't need more time, you need more focus." If it's a quick hit of energy or perspective → MORNING_BOOST. When in doubt between this and SPREAD_THE_IDEA, pick MORNING_BOOST.
 
 4. SPREAD_THE_IDEA — a surprising fact, counterintuitive concept, or deep insight that makes you want to tell someone about it. "Did you know 90% of startups fail because of X?" ONLY use this when the main value is the idea itself being shared, not personal motivation.
-
-5. TODAYS_TAKEAWAY — a distilled lesson or principle worth remembering. Use only when nothing above fits.
 
 Respond with ONLY the style name. Nothing else.`;
 
@@ -54,7 +56,7 @@ export class InsightClassifierService {
    */
   scheduleClassify(insightId: string, content: string, immediate = false): void {
     if (!this.openai) return;
-    if (content.trim().length < MIN_CONTENT_LENGTH) return;
+    if (stripHtml(content).length < MIN_CONTENT_LENGTH) return;
 
     const prev = this.pending.get(insightId);
     if (prev) clearTimeout(prev);
@@ -81,7 +83,7 @@ export class InsightClassifierService {
         max_tokens: 20,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content },
+          { role: 'user', content: stripHtml(content) },
         ],
       });
 

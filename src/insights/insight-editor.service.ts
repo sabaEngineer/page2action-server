@@ -2,6 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 const EDIT_PROMPTS: Record<string, string> = {
   make_longer:
     'Add 1-2 short sentences to this book insight — a brief example, a small clarification, or a supporting thought. Do NOT double the length. The result should be only slightly longer than the original. Keep the same tone, style, and language. Return ONLY the expanded text, nothing else.',
@@ -40,7 +44,7 @@ export class InsightEditorService {
         max_tokens: 2000,
         messages: [
           { role: 'system', content: prompt },
-          { role: 'user', content },
+          { role: 'user', content: stripHtml(content) },
         ],
       });
       return response.choices[0]?.message?.content?.trim() ?? null;
