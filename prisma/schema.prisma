@@ -14,6 +14,8 @@ model User {
   avatar        String?
   googleId      String   @unique
   shareSlug     String?  @unique
+  /// URL segment for shared insight links (e.g. /insight/:profileSlug/...); set on first share.
+  profileSlug   String?  @unique
   allPublic     Boolean  @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -38,17 +40,20 @@ model Shelf {
 }
 
 model Book {
-  id        String    @id @default(cuid())
-  title     String
-  author    String?
-  shelfId   String?
-  shelf     Shelf?    @relation(fields: [shelfId], references: [id], onDelete: SetNull)
-  userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  insights  Insight[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id         String    @id @default(cuid())
+  title      String
+  author     String?
+  shelfId    String?
+  shelf      Shelf?    @relation(fields: [shelfId], references: [id], onDelete: SetNull)
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Stable segment for shared insight URLs; set on first share of any page in this book.
+  publicSlug String?
+  insights   Insight[]
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
+  @@unique([userId, publicSlug])
   @@index([userId])
   @@index([shelfId])
 }
@@ -70,6 +75,10 @@ model Insight {
   userId                String
   user                  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   position              Int             @default(0)
+  /// When true, this page is viewable at the public insight URL for its book/page index.
+  isShared              Boolean         @default(false)
+  /// Optional stable token (for future short links); set when sharing is enabled.
+  shareSlug             String?         @unique
   /// Set when this insight was included in the daily Morning Boost email (at most once per insight).
   morningDigestSentAt   DateTime?
   details               InsightDetail[]

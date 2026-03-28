@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseIntPipe,
   Patch,
   Post,
   Query,
@@ -20,16 +21,27 @@ import { CreateDetailDto } from './dto/create-detail.dto';
 import { UpdateDetailDto } from './dto/update-detail.dto';
 
 @Controller('insights')
-@UseGuards(JwtAuthGuard)
 export class InsightsController {
   constructor(private readonly svc: InsightsService) {}
 
+  /** Public read-only single “page” (no JWT). */
+  @Get('public/page/:ownerSlug/:bookSlug/:page')
+  publicPage(
+    @Param('ownerSlug') ownerSlug: string,
+    @Param('bookSlug') bookSlug: string,
+    @Param('page', ParseIntPipe) page: number,
+  ) {
+    return this.svc.findPublicSharedPage(ownerSlug, bookSlug, page);
+  }
+
   @Post()
+  @UseGuards(JwtAuthGuard)
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateInsightDto) {
     return this.svc.create(user.id, dto);
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard)
   findAll(
     @CurrentUser() user: AuthUser,
     @Query('bookId') bookId?: string,
@@ -38,7 +50,20 @@ export class InsightsController {
     return this.svc.findAllForUser(user.id);
   }
 
+  @Post(':id/share')
+  @UseGuards(JwtAuthGuard)
+  enableShare(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.svc.enableShare(user.id, id);
+  }
+
+  @Delete(':id/share')
+  @UseGuards(JwtAuthGuard)
+  disableShare(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.svc.disableShare(user.id, id);
+  }
+
   @Patch(':id')
+  @UseGuards(JwtAuthGuard)
   update(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
@@ -48,6 +73,7 @@ export class InsightsController {
   }
 
   @Post(':id/ai-edit')
+  @UseGuards(JwtAuthGuard)
   aiEdit(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
@@ -57,6 +83,7 @@ export class InsightsController {
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard)
   @HttpCode(204)
   remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.svc.remove(user.id, id);
@@ -65,6 +92,7 @@ export class InsightsController {
   // ── Details ──
 
   @Post(':insightId/details')
+  @UseGuards(JwtAuthGuard)
   addDetail(
     @CurrentUser() user: AuthUser,
     @Param('insightId') insightId: string,
@@ -74,6 +102,7 @@ export class InsightsController {
   }
 
   @Patch('details/:detailId')
+  @UseGuards(JwtAuthGuard)
   updateDetail(
     @CurrentUser() user: AuthUser,
     @Param('detailId') detailId: string,
@@ -83,6 +112,7 @@ export class InsightsController {
   }
 
   @Delete('details/:detailId')
+  @UseGuards(JwtAuthGuard)
   @HttpCode(204)
   removeDetail(
     @CurrentUser() user: AuthUser,
