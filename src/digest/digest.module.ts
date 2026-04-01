@@ -4,5 +4,6 @@ import { MorningDigestScheduler } from './morning-digest.scheduler';
 
 @Module({
   providers: [MorningDigestService, MorningDigestScheduler],
+  exports: [MorningDigestService],
 })
 export class DigestModule {}

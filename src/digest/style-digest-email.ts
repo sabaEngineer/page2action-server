@@ -1,22 +1,18 @@
 import { InsightStyle } from '@prisma/client';
 
 /**
- * Parchment insight email — same layout for every notification style; label + subject vary by style.
+ * Per-style insight digest email: plain layout (normal email body, not a “book page”).
  */
 
-const C = {
-  shell: '#030712',
-  paperTop: '#f5f0e1',
-  paperBottom: '#ebe5d3',
-  text: '#3b3225',
-  muted: '#8a7e6b',
-  light: '#b0a48d',
-  border: '#d9ceb8',
-  lineRgba: 'rgba(217,206,184,0.45)',
-  redMargin: 'rgba(252,165,165,0.30)',
-  blockquote: '#6b5d4d',
-  hr: '#1c1917',
-  accent: '#8b4513',
+const EMAIL = {
+  outerBg: '#0a0a0a',
+  cardBg: '#0a0a0a',
+  border: '#3f3f46',
+  text: '#fafafa',
+  textSecondary: '#e4e4e7',
+  muted: '#a1a1aa',
+  faint: '#71717a',
+  link: '#60a5fa',
 } as const;
 
 const STYLE_META: Record<
@@ -59,14 +55,198 @@ export function styleDigestEmailSubject(style: InsightStyle): string {
   return STYLE_META[style].subject;
 }
 
-export function sanitizeInsightHtmlForEmail(html: string): string {
-  if (!html || !html.trim()) {
-    return `<p style="margin:0;color:${C.muted};font-family:Georgia,'Times New Roman',serif;font-size:16px;line-height:26px;">(empty page)</p>`;
+const FF =
+  "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+
+const P_BODY =
+  `margin:0 0 12px 0;color:${EMAIL.text} !important;-webkit-text-fill-color:${EMAIL.text} !important;` +
+  `font-family:${FF};font-size:16px;line-height:1.6;opacity:1 !important;`;
+
+const VOID_TAGS = new Set(['br', 'hr', 'img']);
+
+function stripDangerousBlocks(html: string): string {
+  return html
+    .replace(/<\/script/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
+    .replace(/<object[\s\S]*?<\/object>/gi, '')
+    .replace(/<embed\b[^>]*>/gi, '')
+    .replace(/<form[\s\S]*?<\/form>/gi, '');
+}
+
+function splitRoughTags(html: string): string[] {
+  const parts: string[] = [];
+  let i = 0;
+  while (i < html.length) {
+    const lt = html.indexOf('<', i);
+    if (lt === -1) {
+      parts.push(html.slice(i));
+      break;
+    }
+    if (lt > i) parts.push(html.slice(i, lt));
+    const gt = html.indexOf('>', lt);
+    if (gt === -1) {
+      parts.push(escapeHtml(html.slice(lt)));
+      break;
+    }
+    parts.push(html.slice(lt, gt + 1));
+    i = gt + 1;
   }
-  let s = html.replace(/<\/script/gi, '').replace(/<script[\s\S]*?<\/script>/gi, '');
-  s = s.replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
-  s = s.replace(/javascript:/gi, '');
-  return s;
+  return parts;
+}
+
+const TAG_RE =
+  /^<\s*(\/?)\s*([a-zA-Z][a-zA-Z0-9:-]*)\s*((?:[^>"']|"[^"]*"|'[^']*')*?)\s*(\/?)\s*>$/;
+
+function extractAttr(attrPart: string, name: string): string {
+  const re = new RegExp(`\\b${name}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i');
+  const m = re.exec(attrPart);
+  if (!m) return '';
+  return (m[2] ?? m[3] ?? m[4] ?? '').trim();
+}
+
+function safeHref(href: string): boolean {
+  const h = href.trim().toLowerCase();
+  if (!h) return false;
+  if (h.startsWith('javascript:') || h.startsWith('data:') || h.startsWith('vbscript:')) return false;
+  if (h.startsWith('http://') || h.startsWith('https://') || h.startsWith('mailto:')) return true;
+  if (h.startsWith('/') && !h.startsWith('//')) return true;
+  return false;
+}
+
+function headingOpen(tag: string): string {
+  const n = tag[1];
+  const px = n === '1' ? 22 : n === '2' ? 20 : n === '3' ? 18 : 17;
+  return `<${tag} style="margin:0 0 10px 0;font-weight:700;font-size:${px}px;line-height:1.35;color:${EMAIL.text} !important;-webkit-text-fill-color:${EMAIL.text} !important;font-family:${FF};">`;
+}
+
+/**
+ * Keeps safe structure: bold/italic/underline, lists, links, blockquote, headings, br.
+ * Strips all user styles/classes so iOS Mail stays readable.
+ */
+export function sanitizeInsightHtmlForEmailBody(html: string): string {
+  if (!html || !html.trim()) {
+    return `<p style="${P_BODY}margin-bottom:0;color:${EMAIL.muted} !important;-webkit-text-fill-color:${EMAIL.muted} !important;">(No text in this insight.)</p>`;
+  }
+  const cleaned = stripDangerousBlocks(html);
+  const parts = splitRoughTags(cleaned);
+  let out = '';
+  for (const part of parts) {
+    if (!part.startsWith('<')) {
+      out += escapeHtml(part);
+      continue;
+    }
+    const m = TAG_RE.exec(part);
+    if (!m) continue;
+    const closing = m[1] === '/';
+    const name = m[2].toLowerCase();
+    const attrPart = m[3] ?? '';
+    const selfClose = m[4] === '/' || VOID_TAGS.has(name);
+
+    if (name === 'br') {
+      out += '<br />';
+      continue;
+    }
+    if (name === 'hr') {
+      if (!closing) {
+        out += `<hr style="border:none;border-top:1px solid ${EMAIL.border};margin:12px 0;" />`;
+      }
+      continue;
+    }
+    if (name === 'img') {
+      if (!closing) {
+        const alt = extractAttr(attrPart, 'alt');
+        if (alt) out += `<span style="color:${EMAIL.muted};font-style:italic;">${escapeHtml(alt)}</span>`;
+      }
+      continue;
+    }
+
+    if (closing) {
+      if (name === 'strong' || name === 'b') {
+        out += '</strong>';
+        continue;
+      }
+      if (name === 'em' || name === 'i') {
+        out += '</em>';
+        continue;
+      }
+      if (name === 'u') {
+        out += '</u>';
+        continue;
+      }
+      if (name === 'a') {
+        out += '</a>';
+        continue;
+      }
+      if (name === 'p' || name === 'div' || name === 'section' || name === 'article') {
+        out += '</p>';
+        continue;
+      }
+      if (name === 'span') {
+        continue;
+      }
+      if (name === 'li' || name === 'ul' || name === 'ol' || name === 'blockquote' || /^h[1-6]$/.test(name)) {
+        out += `</${name}>`;
+        continue;
+      }
+      continue;
+    }
+
+    if (selfClose && name !== 'br' && name !== 'hr' && name !== 'img') continue;
+
+    if (name === 'strong' || name === 'b') {
+      out += '<strong style="font-weight:700;">';
+      continue;
+    }
+    if (name === 'em' || name === 'i') {
+      out += '<em>';
+      continue;
+    }
+    if (name === 'u') {
+      out += '<u>';
+      continue;
+    }
+    if (name === 'a') {
+      const href = extractAttr(attrPart, 'href');
+      if (!safeHref(href)) continue;
+      out += `<a href="${escapeAttr(href)}" style="color:${EMAIL.link};text-decoration:underline;">`;
+      continue;
+    }
+    if (name === 'p' || name === 'div' || name === 'section' || name === 'article') {
+      out += `<p style="${P_BODY}">`;
+      continue;
+    }
+    if (name === 'ul') {
+      out += `<ul style="margin:0 0 12px 0;padding-left:1.25em;list-style-type:disc;color:${EMAIL.text} !important;-webkit-text-fill-color:${EMAIL.text} !important;font-family:${FF};font-size:16px;line-height:1.6;">`;
+      continue;
+    }
+    if (name === 'ol') {
+      out += `<ol style="margin:0 0 12px 0;padding-left:1.25em;list-style-type:decimal;color:${EMAIL.text} !important;-webkit-text-fill-color:${EMAIL.text} !important;font-family:${FF};font-size:16px;line-height:1.6;">`;
+      continue;
+    }
+    if (name === 'li') {
+      out += `<li style="margin:0 0 4px 0;color:${EMAIL.text} !important;-webkit-text-fill-color:${EMAIL.text} !important;font-family:${FF};font-size:16px;line-height:1.6;">`;
+      continue;
+    }
+    if (name === 'blockquote') {
+      out += `<blockquote style="margin:0 0 12px 0;padding-left:12px;border-left:3px solid ${EMAIL.border};color:${EMAIL.muted} !important;-webkit-text-fill-color:${EMAIL.muted} !important;font-family:${FF};font-size:16px;line-height:1.6;">`;
+      continue;
+    }
+    if (/^h[1-6]$/.test(name)) {
+      out += headingOpen(name);
+      continue;
+    }
+    if (name === 'span') {
+      continue;
+    }
+  }
+
+  const trimmed = out.trim();
+  if (!trimmed) {
+    return `<p style="${P_BODY}margin-bottom:0;color:${EMAIL.muted} !important;-webkit-text-fill-color:${EMAIL.muted} !important;">(No text in this insight.)</p>`;
+  }
+  return trimmed;
 }
 
 export function styleDigestEmailHtml(opts: {
@@ -77,108 +257,57 @@ export function styleDigestEmailHtml(opts: {
   insightsUrl: string;
 }): string {
   const meta = STYLE_META[opts.style];
-  const safeContent = sanitizeInsightHtmlForEmail(opts.contentHtml);
+  const bodyHtml = sanitizeInsightHtmlForEmailBody(opts.contentHtml);
   const greeting = opts.name.trim() ? `Hey ${escapeHtml(opts.name.trim())},` : 'Hey there,';
-
-  const paperShadow = '4px 4px 20px rgba(0,0,0,0.5), inset 0 0 60px rgba(139,69,19,0.04)';
-  const ruledBg = `linear-gradient(180deg, ${C.paperTop} 0%, ${C.paperBottom} 100%), repeating-linear-gradient(transparent, transparent 25px, ${C.lineRgba} 26px)`;
 
   return `
 <!DOCTYPE html>
-<html lang="en" style="color-scheme: light;">
+<html lang="en" style="color-scheme: dark;">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="color-scheme" content="light" />
-  <meta name="supported-color-schemes" content="light" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="supported-color-schemes" content="dark" />
   <title>${escapeHtml(meta.pageTitle)}</title>
   <style type="text/css">
-    :root { color-scheme: light; }
     body { margin: 0 !important; padding: 0 !important; -webkit-text-size-adjust: 100%; }
-    .insight-email-body, .insight-email-body p, .insight-email-body li, .insight-email-body td {
-      font-family: Georgia, 'Times New Roman', serif !important;
-      color: ${C.text} !important;
-      font-size: 16px !important;
-      line-height: 26px !important;
+    .digest-body p { margin: 0 0 12px 0; }
+    .digest-body p:last-child { margin-bottom: 0; }
+    .digest-body ul, .digest-body ol { margin: 0 0 12px 0; padding-left: 1.25em; }
+    .digest-body li { margin: 0 0 4px 0; }
+    .digest-body strong, .digest-body b { font-weight: 700 !important; }
+    .digest-body a { color: ${EMAIL.link} !important; }
+    .digest-sep { border: none !important; border-top: 1px solid ${EMAIL.border} !important; margin: 0 0 20px 0 !important; }
+    @media (prefers-color-scheme: dark) {
+      .digest-card { background-color: ${EMAIL.cardBg} !important; }
+      .digest-body, .digest-body p, .digest-body li, .digest-body td, .digest-body th {
+        color: ${EMAIL.text} !important;
+        -webkit-text-fill-color: ${EMAIL.text} !important;
+      }
     }
-    .insight-email-body p { margin: 0 0 0.25em 0 !important; }
-    .insight-email-body ul {
-      list-style-type: disc !important;
-      padding-left: 1.2em !important;
-      margin: 0.3em 0 !important;
-    }
-    .insight-email-body ol {
-      list-style-type: decimal !important;
-      padding-left: 1.2em !important;
-      margin: 0.3em 0 !important;
-    }
-    .insight-email-body blockquote {
-      border-left: 3px solid ${C.border} !important;
-      padding-left: 0.8em !important;
-      margin: 0.4em 0 !important;
-      color: ${C.blockquote} !important;
-      font-style: italic !important;
-    }
-    .insight-email-body hr {
-      border: none !important;
-      border-top: 2px solid ${C.hr} !important;
-      margin: 0.75rem 0 !important;
-      width: 100% !important;
-      background: transparent !important;
-    }
-    .insight-email-body strong, .insight-email-body b { color: ${C.text} !important; font-weight: 700 !important; }
-    .insight-email-body em, .insight-email-body i { font-style: italic !important; }
-    .insight-email-body u { text-decoration: underline !important; }
-    [data-ogsc] .email-shell { background-color: ${C.shell} !important; }
   </style>
 </head>
-<body style="margin:0;padding:0;background-color:${C.shell};color-scheme:light;">
-  <table role="presentation" class="email-shell" width="100%" cellspacing="0" cellpadding="0" bgcolor="${C.shell}" style="background-color:${C.shell};padding:24px 12px;">
+<body style="margin:0;padding:0;background-color:${EMAIL.outerBg};color-scheme:dark;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:${EMAIL.outerBg};">
     <tr>
-      <td align="center">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;border-collapse:collapse;">
+      <td align="center" style="padding:24px 16px;">
+        <table role="presentation" class="digest-card" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;border-collapse:collapse;background-color:${EMAIL.cardBg};border:1px solid ${EMAIL.border};border-radius:8px;">
           <tr>
-            <td style="padding:0 0 16px 0;font-family:Georgia,'Times New Roman',serif;font-size:13px;color:${C.muted};text-align:left;">
-              ${greeting}<br />
-              <span style="color:${C.light};">${escapeHtml(meta.tagline)}</span>
-            </td>
-          </tr>
-          <tr>
-            <td bgcolor="${C.paperTop}" style="background:${ruledBg};background-color:${C.paperTop};border:1px solid ${C.border};border-radius:2px;box-shadow:${paperShadow};">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
-                <tr>
-                  <td style="padding:14px 20px 12px 20px;border-bottom:1px solid ${C.border};font-family:Georgia,'Times New Roman',serif;background-color:${C.paperTop};">
-                    <span style="font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:${C.muted};">${escapeHtml(meta.ribbon)}</span><br />
-                    <span style="font-size:11px;color:${C.light};">${escapeHtml(opts.bookTitle)}</span>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:0;background-color:${C.paperTop};">
-                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
-                      <tr>
-                        <td width="48" valign="top" bgcolor="${C.paperTop}" style="width:48px;min-width:48px;background-color:${C.paperTop};border-right:1px solid ${C.redMargin};font-size:1px;line-height:1px;">&nbsp;</td>
-                        <td valign="top" bgcolor="${C.paperTop}" style="padding:22px 20px 28px 16px;background:${ruledBg};background-color:${C.paperTop};">
-                          <div class="insight-email-body" style="font-family:Georgia,'Times New Roman',serif;font-size:16px;line-height:26px;color:${C.text};">
-                            ${safeContent}
-                          </div>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:20px 0 8px 0;text-align:center;">
-              <a href="${escapeAttr(opts.insightsUrl)}" style="display:inline-block;padding:10px 20px;background-color:rgba(139,69,19,0.15);color:${C.accent};font-family:Georgia,'Times New Roman',serif;font-size:14px;font-weight:600;text-decoration:none;border-radius:8px;border:1px solid rgba(139,69,19,0.25);">
-                Open insights
-              </a>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:8px 0 0 0;font-family:Georgia,'Times New Roman',serif;font-size:12px;color:${C.muted};text-align:center;">
-              Page2Action — ideas at the right time
+            <td style="padding:24px 20px;font-family:${FF};background-color:${EMAIL.cardBg};color:${EMAIL.text};">
+              <p style="margin:0 0 6px;font-size:15px;line-height:1.5;color:${EMAIL.text};-webkit-text-fill-color:${EMAIL.text};">${greeting}</p>
+              <p style="margin:0 0 20px;font-size:14px;line-height:1.5;color:${EMAIL.muted};-webkit-text-fill-color:${EMAIL.muted};">${escapeHtml(meta.tagline)}</p>
+              <p style="margin:0 0 4px;font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:${EMAIL.faint};-webkit-text-fill-color:${EMAIL.faint};">${escapeHtml(meta.ribbon)}</p>
+              <p style="margin:0 0 0;font-size:14px;line-height:1.45;color:${EMAIL.textSecondary};-webkit-text-fill-color:${EMAIL.textSecondary};font-weight:600;">${escapeHtml(opts.bookTitle)}</p>
+              <hr class="digest-sep" style="border:none;border-top:1px solid ${EMAIL.border};margin:20px 0 20px 0;width:100%;" />
+              <div class="digest-body">
+                ${bodyHtml}
+              </div>
+              <p style="margin:20px 0 0;font-size:15px;line-height:1.5;">
+                <a href="${escapeAttr(opts.insightsUrl)}" style="color:${EMAIL.link};-webkit-text-fill-color:${EMAIL.link};text-decoration:underline;">Open insights in Page2Action</a>
+              </p>
+              <p style="margin:20px 0 0;font-size:12px;line-height:1.5;color:${EMAIL.faint};-webkit-text-fill-color:${EMAIL.faint};">
+                Page2Action — ideas at the right time
+              </p>
             </td>
           </tr>
         </table>
