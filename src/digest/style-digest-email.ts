@@ -1,9 +1,9 @@
+import { InsightStyle } from '@prisma/client';
+
 /**
- * Morning Boost HTML — matches in-app insight paper (parchment, ruled lines, tiptap-like typography).
- * Table layout + inline fallbacks; <style> mirrors client `index.css` `.tiptap` rules where possible.
+ * Parchment insight email — same layout for every notification style; label + subject vary by style.
  */
 
-/** Aligns with `insightPaperTheme` + `index.css` `.tiptap` */
 const C = {
   shell: '#030712',
   paperTop: '#f5f0e1',
@@ -19,6 +19,46 @@ const C = {
   accent: '#8b4513',
 } as const;
 
+const STYLE_META: Record<
+  InsightStyle,
+  { subject: string; tagline: string; ribbon: string; pageTitle: string }
+> = {
+  MORNING_BOOST: {
+    subject: '☀️ Your Morning Boost — Page2Action',
+    tagline: 'Your Morning Boost from Page2Action',
+    ribbon: 'Morning boost',
+    pageTitle: 'Your Morning Boost',
+  },
+  DO_IT_NOW: {
+    subject: '⚡ Do it now — Page2Action',
+    tagline: 'Your “Do it now” nudge from Page2Action',
+    ribbon: 'Do it now',
+    pageTitle: 'Do it now',
+  },
+  SPREAD_THE_IDEA: {
+    subject: '💡 Spread the idea — Page2Action',
+    tagline: 'An idea worth sharing — from Page2Action',
+    ribbon: 'Spread the idea',
+    pageTitle: 'Spread the idea',
+  },
+  APPLY_TODAY: {
+    subject: '🎯 Apply this today — Page2Action',
+    tagline: 'Something to apply today — from Page2Action',
+    ribbon: 'Apply today',
+    pageTitle: 'Apply this today',
+  },
+  TODAYS_TAKEAWAY: {
+    subject: '📌 Today’s takeaway — Page2Action',
+    tagline: 'Today’s takeaway from Page2Action',
+    ribbon: 'Today’s takeaway',
+    pageTitle: 'Today’s takeaway',
+  },
+};
+
+export function styleDigestEmailSubject(style: InsightStyle): string {
+  return STYLE_META[style].subject;
+}
+
 export function sanitizeInsightHtmlForEmail(html: string): string {
   if (!html || !html.trim()) {
     return `<p style="margin:0;color:${C.muted};font-family:Georgia,'Times New Roman',serif;font-size:16px;line-height:26px;">(empty page)</p>`;
@@ -29,12 +69,14 @@ export function sanitizeInsightHtmlForEmail(html: string): string {
   return s;
 }
 
-export function morningBoostEmailHtml(opts: {
+export function styleDigestEmailHtml(opts: {
+  style: InsightStyle;
   name: string;
   bookTitle: string;
   contentHtml: string;
   insightsUrl: string;
 }): string {
+  const meta = STYLE_META[opts.style];
   const safeContent = sanitizeInsightHtmlForEmail(opts.contentHtml);
   const greeting = opts.name.trim() ? `Hey ${escapeHtml(opts.name.trim())},` : 'Hey there,';
 
@@ -49,11 +91,10 @@ export function morningBoostEmailHtml(opts: {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="light" />
   <meta name="supported-color-schemes" content="light" />
-  <title>Your Morning Boost</title>
+  <title>${escapeHtml(meta.pageTitle)}</title>
   <style type="text/css">
     :root { color-scheme: light; }
     body { margin: 0 !important; padding: 0 !important; -webkit-text-size-adjust: 100%; }
-    /* Match client .tiptap — use !important so Gmail/Apple don’t override with dark theme */
     .insight-email-body, .insight-email-body p, .insight-email-body li, .insight-email-body td {
       font-family: Georgia, 'Times New Roman', serif !important;
       color: ${C.text} !important;
@@ -99,7 +140,7 @@ export function morningBoostEmailHtml(opts: {
           <tr>
             <td style="padding:0 0 16px 0;font-family:Georgia,'Times New Roman',serif;font-size:13px;color:${C.muted};text-align:left;">
               ${greeting}<br />
-              <span style="color:${C.light};">Your Morning Boost from Page2Action</span>
+              <span style="color:${C.light};">${escapeHtml(meta.tagline)}</span>
             </td>
           </tr>
           <tr>
@@ -107,7 +148,7 @@ export function morningBoostEmailHtml(opts: {
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
                 <tr>
                   <td style="padding:14px 20px 12px 20px;border-bottom:1px solid ${C.border};font-family:Georgia,'Times New Roman',serif;background-color:${C.paperTop};">
-                    <span style="font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:${C.muted};">Morning boost</span><br />
+                    <span style="font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:${C.muted};">${escapeHtml(meta.ribbon)}</span><br />
                     <span style="font-size:11px;color:${C.light};">${escapeHtml(opts.bookTitle)}</span>
                   </td>
                 </tr>

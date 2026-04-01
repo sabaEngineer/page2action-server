@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
+import { seedUserNotificationSchedules } from '../users/notification-schedule.seed';
 import { EmailService } from '../email/email.service';
 
 interface GoogleUser {
@@ -43,6 +44,8 @@ export class AuthService {
       await this.prisma.shelf.create({
         data: { name: 'My books shelf', position: 0, userId: user.id },
       });
+
+      await seedUserNotificationSchedules(this.prisma, user.id);
 
       void this.email.send(
         user.email,

@@ -1,0 +1,6 @@
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN "morningBoostEmailEnabled" BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE "User" ADD COLUMN "morningBoostLocalHour" INTEGER NOT NULL DEFAULT 6;
+ALTER TABLE "User" ADD COLUMN "morningBoostLocalMinute" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "User" ADD COLUMN "morningBoostTimeZone" TEXT NOT NULL DEFAULT 'UTC';
+ALTER TABLE "User" ADD COLUMN "morningBoostLastDigestAt" TIMESTAMP(3);

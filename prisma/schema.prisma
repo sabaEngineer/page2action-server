@@ -17,11 +17,37 @@ model User {
   /// URL segment for shared insight links (e.g. /insight/:profileSlug/...); set on first share.
   profileSlug   String?  @unique
   allPublic     Boolean  @default(false)
+  /// IANA zone for all insight emails; app syncs from the device (not user-picked in UI).
+  deliveryTimeZone String @default("UTC")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   books         Book[]
   shelves       Shelf[]
   insights      Insight[]
+  notificationSchedules UserNotificationSchedule[]
+  notificationLastSends UserNotificationLastSend[]
+}
+
+/// Per–insight-style email schedule (local wall time uses `User.deliveryTimeZone`).
+model UserNotificationSchedule {
+  userId      String
+  style       InsightStyle
+  enabled     Boolean      @default(false)
+  localHour   Int          @default(8)
+  localMinute Int          @default(0)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, style])
+  @@index([userId, enabled])
+}
+
+model UserNotificationLastSend {
+  userId     String
+  style      InsightStyle
+  lastSentAt DateTime
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, style])
 }
 
 model Shelf {
@@ -79,7 +105,7 @@ model Insight {
   isShared              Boolean         @default(false)
   /// Optional stable token (for future short links); set when sharing is enabled.
   shareSlug             String?         @unique
-  /// Set when this insight was included in the daily Morning Boost email (at most once per insight).
+  /// Set when this insight was sent by any automated style email (at most once per insight).
   morningDigestSentAt   DateTime?
   details               InsightDetail[]
   createdAt             DateTime        @default(now())

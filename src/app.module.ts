@@ -8,6 +8,7 @@ import { ShelvesModule } from './shelves/shelves.module';
 import { InsightsModule } from './insights/insights.module';
 import { EmailModule } from './email/email.module';
 import { DigestModule } from './digest/digest.module';
+import { UsersModule } from './users/users.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -22,6 +23,7 @@ import { AppService } from './app.service';
     InsightsModule,
     EmailModule,
     DigestModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
